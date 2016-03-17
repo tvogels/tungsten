@@ -20,6 +20,7 @@
 
 #include <iostream>
 #include <xmmintrin.h>
+#include <tinyformat/tinyformat.hpp>
 
 #if defined(PTHREADS_WIN32)
 #pragma comment (lib, "pthreadVC.lib")
@@ -201,6 +202,7 @@ namespace embree
 #if defined(__UNIX__) || defined(PTHREADS_WIN32)
 
 #include <pthread.h>
+#include <errno.h>
 #include <sched.h>
 
 #if defined(__USE_NUMA__)
@@ -245,23 +247,52 @@ namespace embree
 
     /* set stack size */
     pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    if (stack_size > 0) pthread_attr_setstacksize (&attr, stack_size);
-    
-    /* set affinity */
-#if defined(__LINUX__)
-    if (threadID >= 0) {
-      cpu_set_t cset;
-      CPU_ZERO(&cset);
-      CPU_SET(threadID, &cset);
-      pthread_attr_setaffinity_np(&attr,sizeof(cpu_set_t),&cset);
+    if (pthread_attr_init(&attr) != 0)
+        throw std::runtime_error("pthread_attr_init failed. Wut?");
+    if (stack_size > 0) {
+        int ret_value = pthread_attr_setstacksize (&attr, stack_size);
+        if (ret_value != 0) {
+            if (ret_value == EAGAIN)
+                throw std::runtime_error(tfm::format("pthread_attr_setstacksize(%d): EAGAIN", stack_size));
+            if (ret_value == EINVAL)
+                throw std::runtime_error(tfm::format("pthread_attr_setstacksize(%d): EINVAL", stack_size));
+            if (ret_value == EPERM)
+                throw std::runtime_error(tfm::format("pthread_attr_setstacksize(%d): EPERM", stack_size));
+            throw std::runtime_error(tfm::format("pthread_attr_setstacksize(%d): I dunno lol", stack_size));
+        }
     }
-#endif
+
+//    /* set affinity */
+//#if defined(__LINUX__)
+//    if (threadID >= 0) {
+//      cpu_set_t cset;
+//      CPU_ZERO(&cset);
+//      CPU_SET(threadID, &cset);
+//      int ret_value = pthread_attr_setaffinity_np(&attr,sizeof(cpu_set_t),&cset);
+//      if (ret_value != 0) {
+//          if (ret_value == EAGAIN)
+//              throw std::runtime_error(tfm::format("pthread_attr_setaffinity_np(%d): EAGAIN", threadID));
+//          if (ret_value == EINVAL)
+//              throw std::runtime_error(tfm::format("pthread_attr_setaffinity_np(%d): EINVAL", threadID));
+//          if (ret_value == EPERM)
+//              throw std::runtime_error(tfm::format("pthread_attr_setaffinity_np(%d): EPERM", threadID));
+//          throw std::runtime_error(tfm::format("pthread_attr_setaffinity_np(%d): I dunno lol", threadID));
+//      }
+//    }
+//#endif
 
     /* create thread */
     pthread_t* tid = new pthread_t;
-    if (pthread_create(tid,&attr,(void*(*)(void*))threadStartup,new ThreadStartupData(f,arg,threadID)) != 0)
-      throw std::runtime_error("pthread_create");
+    int ret_value = pthread_create(tid,&attr,(void*(*)(void*))threadStartup,new ThreadStartupData(f,arg,threadID));
+    if (ret_value != 0) {
+      if (ret_value == EAGAIN)
+          throw std::runtime_error("pthread_create: EAGAIN");
+      if (ret_value == EINVAL)
+          throw std::runtime_error("pthread_create: EINVAL");
+      if (ret_value == EPERM)
+          throw std::runtime_error("pthread_create: EPERM");
+      throw std::runtime_error("pthread_create: I dunno lol");
+    }
 
     return thread_t(tid);
   }
