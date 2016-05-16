@@ -15,7 +15,6 @@
 #include <ImfOutputFile.h>
 #include <ImfInputFile.h>
 #include <ImfIO.h>
-#include <half.h>
 #endif
 
 static const int GammaCorrection[] = {
@@ -475,16 +474,16 @@ bool saveExr(const Path &path, const float *img, int w, int h, int channels)
     Imf::Header header(w, h, 1.0f, Imath::V2f(0, 0), 1.0f, Imf::INCREASING_Y, Imf::PIZ_COMPRESSION);
     Imf::FrameBuffer frameBuffer;
 
-    std::unique_ptr<half[]> data(new half[w*h*channels]);
+    std::unique_ptr<float[]> data(new float[w*h*channels]);
     for (int i = 0; i < w*h*channels; ++i)
-        data[i] = half(img[i]);
+        data[i] = float(img[i]);
 
     const char *channelNames[] = {"R", "G", "B", "A"};
     for (int i = 0; i < channels; ++i) {
         const char *channelName = (channels == 1) ? "Y" : channelNames[i];
-        header.channels().insert(channelName, Imf::Channel(Imf::HALF));
-        frameBuffer.insert(channelName, Imf::Slice(Imf::HALF, reinterpret_cast<char *>(data.get() + i),
-                sizeof(half)*channels, sizeof(half)*channels*w));
+        header.channels().insert(channelName, Imf::Channel(Imf::FLOAT));
+        frameBuffer.insert(channelName, Imf::Slice(Imf::FLOAT, reinterpret_cast<char *>(data.get() + i),
+                sizeof(float)*channels, sizeof(float)*channels*w));
     }
 
     ExrOStream out(std::move(outputStream));
